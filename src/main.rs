@@ -18,6 +18,7 @@ use tui::Terminal;
 mod bus;
 mod cpu;
 mod display;
+mod instructions;
 mod memory;
 
 fn panic_hook(info: &PanicInfo<'_>) {
@@ -41,7 +42,7 @@ fn panic_hook(info: &PanicInfo<'_>) {
 }
 
 fn main() -> Result<()> {
-    let mut file = File::open("res/2048.obj").context("Failed to open program binary file");
+    let mut file = File::open("res/2048.obj").context("Failed to open program binary file")?;
     let mut buffer = Vec::<u8>::new();
 
     file.read_to_end(&mut buffer)

@@ -52,7 +52,7 @@ impl Bus {
     pub fn draw<B: Backend>(&self, terminal: &mut Terminal<B>, cpu: &CPU) {
         let offset: u16 = 10;
         let registers = cpu.get_registers();
-        let pc = registers[Register::PC as usize];
+        let pc = registers.read_register(Register::PC);
 
         let mem: Vec<ListItem> = self.mem.mem
             [0.max(pc as i32 - offset as i32) as usize..u16::max_value().min(pc + offset) as usize]
