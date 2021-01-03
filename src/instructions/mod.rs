@@ -1,13 +1,38 @@
 use crate::cpu::{Registers, CPU};
 use anyhow::{Context, Result};
 
+use crate::bus::Bus;
 use crate::instructions::add::Add;
+use crate::instructions::and::And;
 use crate::instructions::br::Br;
+use crate::instructions::jmp::Jmp;
+use crate::instructions::jsr::Jsr;
+use crate::instructions::ld::Ld;
+use crate::instructions::ldi::Ldi;
+use crate::instructions::ldr::Ldr;
+use crate::instructions::lea::Lea;
+use crate::instructions::not::Not;
+use crate::instructions::st::St;
+use crate::instructions::sti::Sti;
+use crate::instructions::str::Str;
+use crate::instructions::trap::Trap;
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 
 pub mod add;
+pub mod and;
 pub mod br;
+mod jmp;
+pub mod jsr;
+pub mod ld;
+pub mod ldi;
+pub mod ldr;
+pub mod lea;
+pub mod not;
+pub mod st;
+pub mod sti;
+pub mod str;
+pub mod trap;
 
 #[derive(FromPrimitive, Debug, PartialEq)]
 pub enum OpCode {
@@ -49,7 +74,7 @@ pub trait Instruction {
     fn new(instruction: u16) -> Result<Box<dyn Instruction>>
     where
         Self: Sized;
-    fn run(&self, registers: &mut Registers) -> Result<()>;
+    fn run(&self, registers: &mut Registers, bus: &mut Bus) -> Result<()>;
     fn to_str(&self) -> String;
 }
 
@@ -68,7 +93,20 @@ pub fn decode(raw_instruction: u16) -> Result<Box<dyn Instruction>> {
     let instruction: Result<Box<dyn Instruction>> = match opcode {
         OpCode::Br => Br::new(raw_instruction),
         OpCode::Add => Add::new(raw_instruction),
-        _ => anyhow::bail!("Not decoded"),
+        OpCode::Ld => Ld::new(raw_instruction),
+        OpCode::St => St::new(raw_instruction),
+        OpCode::Jsr => Jsr::new(raw_instruction),
+        OpCode::And => And::new(raw_instruction),
+        OpCode::Ldr => Ldr::new(raw_instruction),
+        OpCode::Str => Str::new(raw_instruction),
+        OpCode::Rti => anyhow::bail!("Bad opcode: OpRti"),
+        OpCode::Not => Not::new(raw_instruction),
+        OpCode::Ldi => Ldi::new(raw_instruction),
+        OpCode::Sti => Sti::new(raw_instruction),
+        OpCode::Jmp => Jmp::new(raw_instruction),
+        OpCode::Res => anyhow::bail!("Bad opcode: OpRes"),
+        OpCode::Lea => Lea::new(raw_instruction),
+        OpCode::Trap => Trap::new(raw_instruction),
     };
 
     instruction

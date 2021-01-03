@@ -6,6 +6,7 @@ use std::io::{stdout, Write};
 use crate::cpu;
 use crate::cpu::{Register, CPU};
 use crate::display::draw;
+use crate::instructions::decode;
 use std::os::raw::c_int;
 use tui::backend::Backend;
 use tui::widgets::ListItem;
@@ -59,10 +60,11 @@ impl Bus {
             .iter()
             .enumerate()
             .map(|(i, val)| {
+                let instruction = decode(*val).unwrap().to_str();
                 ListItem::new(format!(
-                    "{:#04X} - {:#04X}",
+                    "{:#04X} - {}",
                     i + 0.max(pc as i32 - offset as i32) as usize,
-                    val
+                    instruction
                 ))
             })
             .collect();

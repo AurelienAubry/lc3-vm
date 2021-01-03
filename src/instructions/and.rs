@@ -3,7 +3,7 @@ use crate::cpu::{register_from_u16, Flag, Register, Registers, CPU};
 use crate::instructions::{sign_extend, two_complement_to_dec, Instruction};
 use anyhow::{Context, Result};
 
-pub struct Add {
+pub struct And {
     dst_reg: Register,
     sr1_reg: Register,
     sr2_reg: Option<Register>,
@@ -11,7 +11,7 @@ pub struct Add {
     is_imm: bool,
 }
 
-impl Instruction for Add {
+impl Instruction for And {
     fn new(instruction: u16) -> Result<Box<dyn Instruction>> {
         let dst_reg: Register = register_from_u16((instruction >> 9) & 0x7)?;
         let sr1_reg = register_from_u16((instruction >> 6) & 0x7)?;
@@ -39,11 +39,11 @@ impl Instruction for Add {
     fn run(&self, registers: &mut Registers, bus: &mut Bus) -> Result<()> {
         if self.is_imm {
             let val: u32 = sign_extend(self.imm5.context("Failed to read imm5")?, 5) as u32
-                + registers.read_register(self.sr1_reg) as u32;
+                & registers.read_register(self.sr1_reg) as u32;
             registers.write_register(self.dst_reg, val as u16);
         } else {
             let val: u32 = registers.read_register(self.sr1_reg) as u32
-                + registers.read_register(self.sr2_reg.context("Failed to read sr2 register")?)
+                & registers.read_register(self.sr2_reg.context("Failed to read sr2 register")?)
                     as u32;
             registers.write_register(self.dst_reg, val as u16);
         }
@@ -56,14 +56,14 @@ impl Instruction for Add {
     fn to_str(&self) -> String {
         if self.is_imm {
             format!(
-                "ADD {:?}, {:?}, #{}",
+                "AND {:?}, {:?}, #{}",
                 self.dst_reg,
                 self.sr1_reg,
                 two_complement_to_dec(self.imm5.unwrap(), 5)
             )
         } else {
             format!(
-                "ADD {:?}, {:?}, {:?}",
+                "AND {:?}, {:?}, {:?}",
                 self.dst_reg,
                 self.sr1_reg,
                 self.sr2_reg.unwrap()
@@ -92,19 +92,26 @@ mod tests {
         assert_eq!(cpu.reg.read_register(Register::R2), 0x0A + 0x05);
         assert_eq!(cpu.reg.read_register(Register::COND), Flag::Pos as u16);
 
-        // Immediate Mode: 10-5=5
-        let instruction = decode(0b0001_010_000_1_11011).unwrap();
+        cpu.reg.write_register(Register::R0, 0xFF);
+        cpu.reg.write_register(Register::R1, 0x0F);
+        let instruction = decode(0b0101_010_000_0_00_001).unwrap();
         cpu.run(&instruction, &mut bus).unwrap();
-        assert_eq!(cpu.reg.read_register(Register::R2), 0x05);
+        assert_eq!(cpu.reg.read_register(Register::R2), 0x0F & 0xFF);
+        assert_eq!(cpu.reg.read_register(Register::COND), Flag::Pos as u16);
+
+        // Immediate Mode: 10-5=5
+        let instruction = decode(0b0101_011_000_1_01111).unwrap();
+        cpu.run(&instruction, &mut bus).unwrap();
+        assert_eq!(cpu.reg.read_register(Register::R3), 0xFF & 0x0F);
         assert_eq!(cpu.reg.read_register(Register::COND), Flag::Pos as u16);
     }
 
     #[test]
     fn test_to_str() {
-        let inst = decode(0b0001_010_000_0_00_001).unwrap();
-        assert_eq!(inst.to_str(), "ADD R2, R0, R1");
+        let inst = decode(0b0101_010_000_0_00_001).unwrap();
+        assert_eq!(inst.to_str(), "AND R2, R0, R1");
 
-        let inst = decode(0b0001_010_000_1_11011).unwrap();
-        assert_eq!(inst.to_str(), "ADD R2, R0, #-5")
+        let inst = decode(0b0101_010_000_1_11011).unwrap();
+        assert_eq!(inst.to_str(), "AND R2, R0, #-5")
     }
 }

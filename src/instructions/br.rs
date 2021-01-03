@@ -1,3 +1,4 @@
+use crate::bus::Bus;
 use crate::cpu::{Flag, Register, Registers, CPU};
 use crate::instructions::{sign_extend, Instruction};
 use anyhow::{Context, Result};
@@ -18,7 +19,7 @@ impl Instruction for Br {
         }))
     }
 
-    fn run(&self, registers: &mut Registers) -> Result<()> {
+    fn run(&self, registers: &mut Registers, bus: &mut Bus) -> Result<()> {
         let cond_reg = registers.read_register(Register::COND);
         if self.cond_flag & cond_reg != 0 {
             registers.increment_register(Register::PC, self.pc_offset);

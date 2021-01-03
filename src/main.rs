@@ -71,6 +71,7 @@ fn main() -> Result<()> {
     for i in 0..10000 {
         cpu.cycle(&mut bus)?;
         bus.draw(&mut terminal, &cpu);
+        thread::sleep(Duration::from_secs(1));
     }
 
     Ok(())
