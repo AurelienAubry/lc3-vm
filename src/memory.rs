@@ -1,7 +1,7 @@
 pub const MEMORY_SIZE: usize = u16::MAX as usize;
 
 pub struct Memory {
-    mem: [u16; MEMORY_SIZE],
+    pub mem: [u16; MEMORY_SIZE],
 }
 
 impl Memory {

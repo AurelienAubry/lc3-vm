@@ -1,14 +1,14 @@
 use crate::bus::Bus;
-use crate::cpu::Registers::PC;
 use anyhow::{Context, Result};
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
+use std::io::{self, Write};
 
 pub const REGISTER_COUNT: usize = 10;
 pub const PC_START: u16 = 0x3000;
 
 #[derive(FromPrimitive, Debug, PartialEq, Copy, Clone)]
-pub enum Registers {
+pub enum Register {
     R0 = 0,
     R1,
     R2,
@@ -22,49 +22,65 @@ pub enum Registers {
 }
 
 #[derive(FromPrimitive, Debug, PartialEq)]
-pub enum Flags {
+pub enum Flag {
     /// `P` Positive flag
-    FL_POS = 1 << 0,
+    Pos = 1 << 0,
     /// `Z` Zero flag
-    FL_ZRO = 1 << 1,
+    Zro = 1 << 1,
     /// `N` Negative flag
-    FL_NEG = 1 << 2,
+    Neg = 1 << 2,
 }
 
 #[derive(FromPrimitive, Debug, PartialEq)]
-pub enum OpCodes {
+pub enum OpCode {
     /// Branch opcode
-    OP_BR = 0,
+    Br = 0,
     /// Add opcode
-    OP_ADD,
+    Add,
     /// Load opcode
-    OP_LD,
+    Ld,
     /// Load opcode
-    OP_ST,
+    St,
     /// Jump register opcode
-    OP_JSR,
+    Jsr,
     /// Bitwise and opcode
-    OP_AND,
+    And,
     /// Load register opcode
-    OP_LDR,
+    Ldr,
     /// Store register opcode
-    OP_STR,
+    Str,
     /// Unused opcode
-    OP_RTI,
+    Rti,
     /// Bitwise not opcode
-    OP_NOT,
+    Not,
     /// Load indirect opcode
-    OP_LDI,
+    Ldi,
     /// Store indirect opcode
-    OP_STI,
+    Sti,
     /// Jump opcode
-    OP_JMP,
+    Jmp,
     /// Reserved (unused) opcode
-    OP_RES,
+    Res,
     /// Load effective address opcode
-    OP_LEA,
+    Lea,
     /// Execute trap opcode
-    OP_TRAP,
+    Trap,
+}
+
+#[derive(FromPrimitive, Debug, PartialEq)]
+pub enum TrapCode {
+    /// Get character from keyboard, not echoed onto the terminal
+    GetC = 0x20,
+    /// Output a character
+    Out = 0x21,
+    /// Output a word string
+    Puts = 0x22,
+    /// Get character from keyboard, echoed onto the terminal
+    In = 0x23,
+    /// Output a byte string
+    PutSp = 0x24,
+    /// Halt the program
+    Halt = 0x25,
 }
 
 pub struct CPU {
@@ -76,14 +92,14 @@ impl CPU {
         let mut cpu = CPU {
             reg: [0; REGISTER_COUNT],
         };
-        cpu.write_register(Registers::PC, PC_START);
+        cpu.write_register(Register::PC, PC_START);
 
         cpu
     }
 
     pub fn cycle(&mut self, bus: &mut Bus) -> Result<()> {
-        let instruction = bus.read_mem_word(self.read_register(Registers::PC));
-        self.increment_register(Registers::PC, 1);
+        let instruction = bus.read_mem_word(self.read_register(Register::PC));
+        self.increment_register(Register::PC, 1);
 
         self.decode_and_run(instruction, bus)
             .with_context(|| format!("Failed to decode and run instruction: {}", instruction))?;
@@ -92,28 +108,27 @@ impl CPU {
 
     pub fn decode_and_run(&mut self, instruction: u16, bus: &mut Bus) -> Result<()> {
         let opcode = instruction >> 12;
-        let opcode = FromPrimitive::from_u16(opcode)
+        let opcode: OpCode = FromPrimitive::from_u16(opcode)
             .with_context(|| format!("Failed to decode opcode: {}", opcode))?;
 
         match opcode {
-            OpCodes::OP_BR => self.i_br(instruction)?,
-            OpCodes::OP_ADD => self.i_add(instruction)?,
-            OpCodes::OP_LD => self.i_ld(instruction, bus)?,
-            OpCodes::OP_ST => self.i_st(instruction, bus)?,
-            OpCodes::OP_JSR => self.i_jsr(instruction)?,
-            OpCodes::OP_AND => self.i_and(instruction)?,
-            OpCodes::OP_LDR => self.i_ldr(instruction, bus)?,
-            OpCodes::OP_STR => self.i_str(instruction, bus)?,
-            OpCodes::OP_RTI => anyhow::bail!("Bad opcode: OP_RTI"),
-            OpCodes::OP_NOT => self.i_not(instruction)?,
-            OpCodes::OP_LDI => self.i_ldi(instruction, bus)?,
-            OpCodes::OP_STI => self.i_sti(instruction, bus)?,
-            OpCodes::OP_JMP => self.i_jmp(instruction)?,
-            OpCodes::OP_RES => anyhow::bail!("Bad opcode: OP_RES"),
-            OpCodes::OP_LEA => self.i_lea(instruction)?,
-            OpCodes::OP_TRAP => self.i_trap(instruction)?,
+            OpCode::Br => self.i_br(instruction)?,
+            OpCode::Add => self.i_add(instruction)?,
+            OpCode::Ld => self.i_ld(instruction, bus)?,
+            OpCode::St => self.i_st(instruction, bus)?,
+            OpCode::Jsr => self.i_jsr(instruction)?,
+            OpCode::And => self.i_and(instruction)?,
+            OpCode::Ldr => self.i_ldr(instruction, bus)?,
+            OpCode::Str => self.i_str(instruction, bus)?,
+            OpCode::Rti => anyhow::bail!("Bad opcode: OpRti"),
+            OpCode::Not => self.i_not(instruction)?,
+            OpCode::Ldi => self.i_ldi(instruction, bus)?,
+            OpCode::Sti => self.i_sti(instruction, bus)?,
+            OpCode::Jmp => self.i_jmp(instruction)?,
+            OpCode::Res => anyhow::bail!("Bad opcode: OpRes"),
+            OpCode::Lea => self.i_lea(instruction)?,
+            OpCode::Trap => self.i_trap(instruction, bus)?,
         }
-
         Ok(())
     }
 
@@ -121,17 +136,17 @@ impl CPU {
         let pc_offset = sign_extend(instruction & 0x1FF, 9);
         let cond_flag = (instruction >> 9) & 0x7;
 
-        let cond_reg = self.read_register(Registers::COND);
+        let cond_reg = self.read_register(Register::COND);
 
         if cond_flag & cond_reg != 0 {
-            self.increment_register(Registers::PC, pc_offset);
+            self.increment_register(Register::PC, pc_offset);
         }
 
         Ok(())
     }
 
     fn i_add(&mut self, instruction: u16) -> Result<()> {
-        let dst_reg: Registers = register_from_u16((instruction >> 9) & 0x7)?;
+        let dst_reg: Register = register_from_u16((instruction >> 9) & 0x7)?;
         let sr1_reg = register_from_u16((instruction >> 6) & 0x7)?;
         let imm_flag = (instruction >> 5) & 0x1;
 
@@ -153,11 +168,8 @@ impl CPU {
     fn i_ld(&mut self, instruction: u16, bus: &Bus) -> Result<()> {
         let dst_reg = register_from_u16(instruction >> 9 & 0x7)?;
         let pc_offset = sign_extend(instruction & 0x1FF, 9);
-
-        self.write_register(
-            dst_reg,
-            bus.read_mem_word(self.read_register(Registers::PC) + pc_offset),
-        );
+        let addr = self.read_register(Register::PC) as u32 + pc_offset as u32;
+        self.write_register(dst_reg, bus.read_mem_word(addr as u16));
 
         self.update_flags(dst_reg);
 
@@ -169,31 +181,31 @@ impl CPU {
         let pc_offset_9 = sign_extend(instruction & 0x1FF, 9);
 
         bus.write_mem_word(
-            self.read_register(Registers::PC) + pc_offset_9,
+            self.read_register(Register::PC) + pc_offset_9,
             self.read_register(src_reg),
         );
         Ok(())
     }
 
     fn i_jsr(&mut self, instruction: u16) -> Result<()> {
-        self.write_register(Registers::R7, self.read_register(Registers::PC));
+        self.write_register(Register::R7, self.read_register(Register::PC));
         let register_bit = (instruction >> 11) & 0x1;
 
         if register_bit == 0 {
             // JSRR
             let base_register = register_from_u16((instruction >> 6) & 0x7)?;
-            self.write_register(Registers::PC, self.read_register(base_register));
+            self.write_register(Register::PC, self.read_register(base_register));
         } else {
             // JSR
             let pc_offset = sign_extend(instruction & 0x7FF, 11);
-            self.increment_register(Registers::PC, pc_offset);
+            self.increment_register(Register::PC, pc_offset);
         }
 
         Ok(())
     }
 
     fn i_and(&mut self, instruction: u16) -> Result<()> {
-        let dst_reg: Registers = register_from_u16((instruction >> 9) & 0x7)?;
+        let dst_reg: Register = register_from_u16((instruction >> 9) & 0x7)?;
         let sr1_reg = register_from_u16((instruction >> 6) & 0x7)?;
         let imm_flag = (instruction >> 5) & 0x1;
 
@@ -231,10 +243,8 @@ impl CPU {
         let base_reg = register_from_u16((instruction >> 6) & 0x7)?;
         let offset_6 = sign_extend(instruction & 0x3F, 6);
 
-        bus.write_mem_word(
-            self.read_register(base_reg) + offset_6,
-            self.read_register(src_reg),
-        );
+        let addr = self.read_register(base_reg) as u32 + offset_6 as u32;
+        bus.write_mem_word(addr as u16, self.read_register(src_reg));
 
         Ok(())
     }
@@ -254,7 +264,7 @@ impl CPU {
         let dst_reg = register_from_u16((instruction >> 9) & 0x7)?;
         let pc_offset = sign_extend(instruction & 0x1FF, 9);
 
-        let mem_addr = self.read_register(Registers::PC) + pc_offset;
+        let mem_addr = self.read_register(Register::PC) + pc_offset;
         let real_addr = bus.read_mem_word(bus.read_mem_word(mem_addr));
         self.write_register(dst_reg, real_addr);
 
@@ -268,7 +278,7 @@ impl CPU {
         let pc_offset_9 = sign_extend(instruction & 0x1FF, 9);
 
         bus.write_mem_word(
-            bus.read_mem_word(self.read_register(Registers::PC) + pc_offset_9),
+            bus.read_mem_word(self.read_register(Register::PC) + pc_offset_9),
             self.read_register(src_reg),
         );
 
@@ -278,7 +288,7 @@ impl CPU {
     fn i_jmp(&mut self, instruction: u16) -> Result<()> {
         let base_reg = register_from_u16((instruction >> 6) & 0x7)?;
 
-        self.write_register(Registers::PC, self.read_register(base_reg));
+        self.write_register(Register::PC, self.read_register(base_reg));
 
         Ok(())
     }
@@ -287,41 +297,80 @@ impl CPU {
         let dst_reg = register_from_u16((instruction >> 9) & 0x7)?;
         let pc_offset_9 = sign_extend(instruction & 0x1FF, 9);
 
-        self.write_register(dst_reg, self.read_register(Registers::PC) + pc_offset_9);
+        self.write_register(dst_reg, self.read_register(Register::PC) + pc_offset_9);
         self.update_flags(dst_reg);
 
         Ok(())
     }
 
-    fn i_trap(&mut self, instruction: u16) -> Result<()> {
-        unimplemented!();
+    fn i_trap(&mut self, instruction: u16, bus: &mut Bus) -> Result<()> {
+        let trap_code = instruction & 0xFF;
+        let trap_code: TrapCode = FromPrimitive::from_u16(trap_code)
+            .with_context(|| format!("Failed to decode TrapCode: {}", trap_code))?;
+
+        /*match trap_code {
+            TrapCode::GetC => self.trap_getc(bus)?,
+            TrapCode::Out => {}
+            TrapCode::Puts => self.trap_puts(bus)?,
+            TrapCode::In => {}
+            TrapCode::PutSp => {}
+            TrapCode::Halt => {}
+        }*/
 
         Ok(())
     }
 
-    fn increment_register(&mut self, register: Registers, value: u16) {
-        self.reg[register as usize] += value;
+    fn trap_getc(&mut self, bus: &Bus) -> Result<()> {
+        self.write_register(Register::R0, bus.read_char() as u16);
+
+        Ok(())
     }
 
-    fn read_register(&self, register: Registers) -> u16 {
+    fn trap_puts(&self, bus: &Bus) -> Result<()> {
+        let mut address = self.read_register(Register::R0);
+        let mut char = bus.read_mem_word(address);
+        let mut string = vec![];
+
+        while char != 0 {
+            string.push(char as u8);
+            address += 1;
+            char = bus.read_mem_word(address);
+        }
+
+        bus.write_stdout(&string)
+            .context("Failed to write string in stdout")?;
+
+        Ok(())
+    }
+
+    fn increment_register(&mut self, register: Register, value: u16) {
+        let value = self.read_register(register) as u32 + value as u32;
+        self.write_register(register, value as u16);
+    }
+
+    fn read_register(&self, register: Register) -> u16 {
         self.reg[register as usize]
     }
 
-    fn write_register(&mut self, register: Registers, value: u16) {
+    fn write_register(&mut self, register: Register, value: u16) {
         self.reg[register as usize] = value;
     }
 
-    fn update_flags(&mut self, updated_register: Registers) {
+    fn update_flags(&mut self, updated_register: Register) {
         let updated_reg_value = self.read_register(updated_register);
         let flag;
         if updated_reg_value == 0 {
-            flag = Flags::FL_ZRO;
+            flag = Flag::Zro;
         } else if (updated_reg_value >> 15) == 1 {
-            flag = Flags::FL_NEG;
+            flag = Flag::Neg;
         } else {
-            flag = Flags::FL_POS;
+            flag = Flag::Pos;
         }
-        self.reg[Registers::COND as usize] = flag as u16;
+        self.reg[Register::COND as usize] = flag as u16;
+    }
+
+    pub fn get_registers(&self) -> &[u16] {
+        &self.reg
     }
 }
 
@@ -332,7 +381,7 @@ fn sign_extend(mut x: u16, bit_count: u16) -> u16 {
     x
 }
 
-fn register_from_u16(x: u16) -> Result<Registers> {
+fn register_from_u16(x: u16) -> Result<Register> {
     match FromPrimitive::from_u16(x) {
         Some(reg) => Ok(reg),
         None => anyhow::bail!("Failed to cast {} to `Registers`", x),
@@ -352,30 +401,28 @@ mod tests {
 
     #[test]
     fn test_register_from_u16() {
-        assert_eq!(register_from_u16(0x00).unwrap(), Registers::R0);
-        assert_eq!(register_from_u16(0x09).unwrap(), Registers::COND);
+        assert_eq!(register_from_u16(0x00).unwrap(), Register::R0);
+        assert_eq!(register_from_u16(0x09).unwrap(), Register::COND);
 
         let err = std::panic::catch_unwind(|| register_from_u16(0xFA).unwrap());
         assert!(err.is_err());
     }
 
-    // TODO: CPU unit tests
-
     #[test]
     fn test_update_flags() {
         let mut cpu = CPU::new();
 
-        cpu.write_register(Registers::R0, 0);
-        cpu.update_flags(Registers::R0);
-        assert_eq!(cpu.read_register(Registers::COND), Flags::FL_ZRO as u16);
+        cpu.write_register(Register::R0, 0);
+        cpu.update_flags(Register::R0);
+        assert_eq!(cpu.read_register(Register::COND), Flag::Zro as u16);
 
-        cpu.write_register(Registers::R0, 10);
-        cpu.update_flags(Registers::R0);
-        assert_eq!(cpu.read_register(Registers::COND), Flags::FL_POS as u16);
+        cpu.write_register(Register::R0, 10);
+        cpu.update_flags(Register::R0);
+        assert_eq!(cpu.read_register(Register::COND), Flag::Pos as u16);
 
-        cpu.write_register(Registers::R0, 0b1000_0000_0000_0011);
-        cpu.update_flags(Registers::R0);
-        assert_eq!(cpu.read_register(Registers::COND), Flags::FL_NEG as u16);
+        cpu.write_register(Register::R0, 0b1000_0000_0000_0011);
+        cpu.update_flags(Register::R0);
+        assert_eq!(cpu.read_register(Register::COND), Flag::Neg as u16);
     }
 
     #[test]
@@ -383,26 +430,26 @@ mod tests {
         let mut cpu = CPU::new();
 
         // PC += 3, POS Flag
-        cpu.write_register(Registers::COND, Flags::FL_POS as u16);
+        cpu.write_register(Register::COND, Flag::Pos as u16);
         cpu.i_br(0b0000_0010_0000_0011).unwrap();
-        assert_eq!(cpu.read_register(Registers::PC), PC_START + 3);
+        assert_eq!(cpu.read_register(Register::PC), PC_START + 3);
 
         // Wrong flag: PC don't changes
-        cpu.write_register(Registers::COND, Flags::FL_NEG as u16);
+        cpu.write_register(Register::COND, Flag::Neg as u16);
         cpu.i_br(0b0000_0010_0000_0011).unwrap();
-        assert_eq!(cpu.read_register(Registers::PC), PC_START + 3);
+        assert_eq!(cpu.read_register(Register::PC), PC_START + 3);
 
         // PC += 5, NEG Flag
-        cpu.write_register(Registers::PC, PC_START);
-        cpu.write_register(Registers::COND, Flags::FL_NEG as u16);
+        cpu.write_register(Register::PC, PC_START);
+        cpu.write_register(Register::COND, Flag::Neg as u16);
         cpu.i_br(0b0000_1000_0000_0101).unwrap();
-        assert_eq!(cpu.read_register(Registers::PC), PC_START + 5);
+        assert_eq!(cpu.read_register(Register::PC), PC_START + 5);
 
         // PC += 7, ZRO Flag
-        cpu.write_register(Registers::PC, PC_START);
-        cpu.write_register(Registers::COND, Flags::FL_ZRO as u16);
+        cpu.write_register(Register::PC, PC_START);
+        cpu.write_register(Register::COND, Flag::Zro as u16);
         cpu.i_br(0b0000_0100_0000_0111).unwrap();
-        assert_eq!(cpu.read_register(Registers::PC), PC_START + 7);
+        assert_eq!(cpu.read_register(Register::PC), PC_START + 7);
     }
 
     #[test]
@@ -410,16 +457,16 @@ mod tests {
         let mut cpu = CPU::new();
 
         // Registers Mode: 10+5=5
-        cpu.write_register(Registers::R0, 0x0A);
-        cpu.write_register(Registers::R1, 0x05);
+        cpu.write_register(Register::R0, 0x0A);
+        cpu.write_register(Register::R1, 0x05);
         cpu.i_add(0b0001_010_000_0_00_001).unwrap();
-        assert_eq!(cpu.read_register(Registers::R2), 0x0A + 0x05);
-        assert_eq!(cpu.read_register(Registers::COND), Flags::FL_POS as u16);
+        assert_eq!(cpu.read_register(Register::R2), 0x0A + 0x05);
+        assert_eq!(cpu.read_register(Register::COND), Flag::Pos as u16);
 
         // Immediate Mode: 10-5=5
         cpu.i_add(0b0001_010_000_1_11011).unwrap();
-        assert_eq!(cpu.read_register(Registers::R2), 0x05);
-        assert_eq!(cpu.read_register(Registers::COND), Flags::FL_POS as u16);
+        assert_eq!(cpu.read_register(Register::R2), 0x05);
+        assert_eq!(cpu.read_register(Register::COND), Flag::Pos as u16);
     }
 
     #[test]
@@ -430,20 +477,20 @@ mod tests {
         // NEG Flag
         bus.write_mem_word(PC_START + 0x32, 0xABCD);
         cpu.i_ld(0b0010_000_000110010, &bus).unwrap();
-        assert_eq!(cpu.read_register(Registers::R0), 0xABCD);
-        assert_eq!(cpu.read_register(Registers::COND), Flags::FL_NEG as u16);
+        assert_eq!(cpu.read_register(Register::R0), 0xABCD);
+        assert_eq!(cpu.read_register(Register::COND), Flag::Neg as u16);
 
         // POS Flag
         bus.write_mem_word(PC_START + 0x33, 0x0BCD);
         cpu.i_ld(0b0010_000_000110011, &bus).unwrap();
-        assert_eq!(cpu.read_register(Registers::R0), 0x0BCD);
-        assert_eq!(cpu.read_register(Registers::COND), Flags::FL_POS as u16);
+        assert_eq!(cpu.read_register(Register::R0), 0x0BCD);
+        assert_eq!(cpu.read_register(Register::COND), Flag::Pos as u16);
 
         // ZRO Flag
         bus.write_mem_word(PC_START + 0x34, 0x0000);
         cpu.i_ld(0b0010_000_000110100, &bus).unwrap();
-        assert_eq!(cpu.read_register(Registers::R0), 0x0000);
-        assert_eq!(cpu.read_register(Registers::COND), Flags::FL_ZRO as u16);
+        assert_eq!(cpu.read_register(Register::R0), 0x0000);
+        assert_eq!(cpu.read_register(Register::COND), Flag::Zro as u16);
     }
 
     #[test]
@@ -451,7 +498,7 @@ mod tests {
         let mut cpu = CPU::new();
         let mut bus = Bus::new();
 
-        cpu.write_register(Registers::R4, 0xABCD);
+        cpu.write_register(Register::R4, 0xABCD);
         cpu.i_st(0b0011_100_000110010, &mut bus).unwrap();
         assert_eq!(bus.read_mem_word(PC_START + 0x32), 0xABCD);
     }
@@ -462,13 +509,13 @@ mod tests {
 
         // JSR
         cpu.i_jsr(0b0100_1_00000110010).unwrap();
-        assert_eq!(cpu.read_register(Registers::PC), PC_START + 0x32);
+        assert_eq!(cpu.read_register(Register::PC), PC_START + 0x32);
 
         // JSRR
-        cpu.write_register(Registers::PC, PC_START);
-        cpu.write_register(Registers::R4, 0x64);
+        cpu.write_register(Register::PC, PC_START);
+        cpu.write_register(Register::R4, 0x64);
         cpu.i_jsr(0b0100_0_00_100_000000).unwrap();
-        assert_eq!(cpu.read_register(Registers::PC), 0x64);
+        assert_eq!(cpu.read_register(Register::PC), 0x64);
     }
 
     #[test]
@@ -476,16 +523,16 @@ mod tests {
         let mut cpu = CPU::new();
 
         // Registers Mode
-        cpu.write_register(Registers::R0, 0xFF);
-        cpu.write_register(Registers::R1, 0x0F);
+        cpu.write_register(Register::R0, 0xFF);
+        cpu.write_register(Register::R1, 0x0F);
         cpu.i_and(0b0101_010_000_0_00_001).unwrap();
-        assert_eq!(cpu.read_register(Registers::R2), 0x0F & 0xFF);
-        assert_eq!(cpu.read_register(Registers::COND), Flags::FL_POS as u16);
+        assert_eq!(cpu.read_register(Register::R2), 0x0F & 0xFF);
+        assert_eq!(cpu.read_register(Register::COND), Flag::Pos as u16);
 
         // Immediate Mode
         cpu.i_and(0b0101_011_000_1_01111).unwrap();
-        assert_eq!(cpu.read_register(Registers::R3), 0xFF & 0x0F);
-        assert_eq!(cpu.read_register(Registers::COND), Flags::FL_POS as u16);
+        assert_eq!(cpu.read_register(Register::R3), 0xFF & 0x0F);
+        assert_eq!(cpu.read_register(Register::COND), Flag::Pos as u16);
     }
 
     #[test]
@@ -494,16 +541,16 @@ mod tests {
         let mut bus = Bus::new();
 
         bus.write_mem_word(PC_START + 0x32, 0x0FFF);
-        cpu.write_register(Registers::R2, PC_START + 0x32 + 0x05);
+        cpu.write_register(Register::R2, PC_START + 0x32 + 0x05);
         cpu.i_ldr(0b0110_100_010_111011, &mut bus).unwrap();
-        assert_eq!(cpu.read_register(Registers::R4), 0x0FFF);
-        assert_eq!(cpu.read_register(Registers::COND), Flags::FL_POS as u16);
+        assert_eq!(cpu.read_register(Register::R4), 0x0FFF);
+        assert_eq!(cpu.read_register(Register::COND), Flag::Pos as u16);
 
         bus.write_mem_word(PC_START + 0x32, 0xFFFF);
-        cpu.write_register(Registers::R2, PC_START + 0x32 + 0x05);
+        cpu.write_register(Register::R2, PC_START + 0x32 + 0x05);
         cpu.i_ldr(0b0110_100_010_111011, &mut bus).unwrap();
-        assert_eq!(cpu.read_register(Registers::R4), 0xFFFF);
-        assert_eq!(cpu.read_register(Registers::COND), Flags::FL_NEG as u16);
+        assert_eq!(cpu.read_register(Register::R4), 0xFFFF);
+        assert_eq!(cpu.read_register(Register::COND), Flag::Neg as u16);
     }
 
     #[test]
@@ -511,8 +558,8 @@ mod tests {
         let mut cpu = CPU::new();
         let mut bus = Bus::new();
 
-        cpu.write_register(Registers::R1, 0x00FF);
-        cpu.write_register(Registers::R2, 0xABCD);
+        cpu.write_register(Register::R1, 0x00FF);
+        cpu.write_register(Register::R2, 0xABCD);
         cpu.i_str(0b0111_010_001_010100, &mut bus).unwrap();
 
         assert_eq!(bus.read_mem_word(0x00FF + 0x14), 0xABCD);
@@ -523,22 +570,22 @@ mod tests {
         let mut cpu = CPU::new();
 
         // ZRO FLAG
-        cpu.write_register(Registers::R0, 0b1111_1111_1111_1111);
+        cpu.write_register(Register::R0, 0b1111_1111_1111_1111);
         cpu.i_not(0b1001_001_000_1_11111);
-        assert_eq!(cpu.read_register(Registers::R1), 0);
-        assert_eq!(cpu.read_register(Registers::COND), Flags::FL_ZRO as u16);
+        assert_eq!(cpu.read_register(Register::R1), 0);
+        assert_eq!(cpu.read_register(Register::COND), Flag::Zro as u16);
 
         // POS FLAG
-        cpu.write_register(Registers::R0, 0b1000_1111_1111_1111);
+        cpu.write_register(Register::R0, 0b1000_1111_1111_1111);
         cpu.i_not(0b1001_001_000_1_11111);
-        assert_eq!(cpu.read_register(Registers::R1), 0b0111_0000_0000_0000);
-        assert_eq!(cpu.read_register(Registers::COND), Flags::FL_POS as u16);
+        assert_eq!(cpu.read_register(Register::R1), 0b0111_0000_0000_0000);
+        assert_eq!(cpu.read_register(Register::COND), Flag::Pos as u16);
 
         // NEG FLAG
-        cpu.write_register(Registers::R0, 0b0111_1010_1010_1010);
+        cpu.write_register(Register::R0, 0b0111_1010_1010_1010);
         cpu.i_not(0b1001_001_000_1_11111);
-        assert_eq!(cpu.read_register(Registers::R1), 0b1000_0101_0101_0101);
-        assert_eq!(cpu.read_register(Registers::COND), Flags::FL_NEG as u16);
+        assert_eq!(cpu.read_register(Register::R1), 0b1000_0101_0101_0101);
+        assert_eq!(cpu.read_register(Register::COND), Flag::Neg as u16);
     }
 
     #[test]
@@ -549,8 +596,8 @@ mod tests {
         bus.write_mem_word(PC_START + 0x32, 0x0FFF);
         bus.write_mem_word(0x0FFF, 0xABCD);
         cpu.i_ldi(0b1010_100_000110010, &mut bus).unwrap();
-        assert_eq!(cpu.read_register(Registers::R4), 0xABCD);
-        assert_eq!(cpu.read_register(Registers::COND), Flags::FL_NEG as u16);
+        assert_eq!(cpu.read_register(Register::R4), 0xABCD);
+        assert_eq!(cpu.read_register(Register::COND), Flag::Neg as u16);
     }
 
     #[test]
@@ -560,7 +607,7 @@ mod tests {
 
         bus.write_mem_word(PC_START + 0x32, 0xAFFF);
 
-        cpu.write_register(Registers::R2, 0xABCD);
+        cpu.write_register(Register::R2, 0xABCD);
         cpu.i_sti(0b1011_010_000110010, &mut bus).unwrap();
 
         assert_eq!(bus.read_mem_word(0xAFFF), 0xABCD);
@@ -570,10 +617,10 @@ mod tests {
     fn test_i_jmp() {
         let mut cpu = CPU::new();
 
-        cpu.write_register(Registers::R2, 0xABCD);
+        cpu.write_register(Register::R2, 0xABCD);
         cpu.i_jmp(0b1100_000_010_000000).unwrap();
 
-        assert_eq!(cpu.read_register(Registers::PC), 0xABCD);
+        assert_eq!(cpu.read_register(Register::PC), 0xABCD);
     }
 
     #[test]
@@ -582,8 +629,37 @@ mod tests {
 
         cpu.i_lea(0b1110_010_000110010).unwrap();
 
-        assert_eq!(cpu.read_register(Registers::R2), PC_START + 0x32);
-        assert_eq!(cpu.read_register(Registers::COND), Flags::FL_POS as u16);
+        assert_eq!(cpu.read_register(Register::R2), PC_START + 0x32);
+        assert_eq!(cpu.read_register(Register::COND), Flag::Pos as u16);
+    }
+
+    // TODO: find a way to assert TRAP tests
+
+    #[test]
+    #[ignore]
+    fn test_trap_puts() {
+        let mut cpu = CPU::new();
+        let mut bus = Bus::new();
+
+        let hello_world: [u16; 12] = [
+            0x48, 0x65, 0x6C, 0x6C, 0x6F, 0x20, 0x77, 0x6F, 0x72, 0x6C, 0x64, 0x21,
+        ];
+        let word_addr = PC_START + 0x32;
+
+        for (i, char) in hello_world.iter().enumerate() {
+            bus.write_mem_word(word_addr + (i as u16), *char);
+        }
+
+        cpu.write_register(Register::R0, word_addr);
+        cpu.trap_puts(&bus);
+    }
+
+    #[test]
+    fn test_trap_getc() {
+        let mut cpu = CPU::new();
+        let mut bus = Bus::new();
+
+        cpu.trap_getc(&bus);
     }
 
     #[test]
@@ -592,24 +668,24 @@ mod tests {
 
         // Jump to subroutine
         cpu.i_jsr(0b0100_1_00000110010);
-        assert_eq!(cpu.read_register(Registers::PC), PC_START + 0x32);
+        assert_eq!(cpu.read_register(Register::PC), PC_START + 0x32);
 
         cpu.i_jmp(0b1100_000_111_000000);
-        assert_eq!(cpu.read_register(Registers::PC), PC_START);
+        assert_eq!(cpu.read_register(Register::PC), PC_START);
     }
 
     #[test]
     fn test_registers_operations() {
         let mut cpu = CPU::new();
 
-        cpu.increment_register(Registers::R0, 1);
-        assert_eq!(cpu.read_register(Registers::R0), 1);
+        cpu.increment_register(Register::R0, 1);
+        assert_eq!(cpu.read_register(Register::R0), 1);
 
-        cpu.increment_register(Registers::R0, 10);
-        assert_eq!(cpu.read_register(Registers::R0), 11);
+        cpu.increment_register(Register::R0, 10);
+        assert_eq!(cpu.read_register(Register::R0), 11);
 
-        cpu.write_register(Registers::R1, 15);
-        assert_eq!(cpu.read_register(Registers::R1), 15);
+        cpu.write_register(Register::R1, 15);
+        assert_eq!(cpu.read_register(Register::R1), 15);
     }
 
     fn create_and_init_cpu(instructions: &Vec<u16>) -> (CPU, Bus) {
