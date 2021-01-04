@@ -1,7 +1,7 @@
 use crate::bus::Bus;
-use crate::cpu::{register_from_u16, Flag, Register, Registers, CPU};
+use crate::cpu::{register_from_u16, Register, Registers};
 use crate::instructions::{sign_extend, two_complement_to_dec, Instruction};
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 pub struct Lea {
     dst_reg: Register,
@@ -19,7 +19,7 @@ impl Instruction for Lea {
         }))
     }
 
-    fn run(&self, registers: &mut Registers, bus: &mut Bus) -> Result<()> {
+    fn run(&self, registers: &mut Registers, _bus: &mut Bus) -> Result<()> {
         registers.write_register(
             self.dst_reg,
             registers.read_register(Register::PC) + sign_extend(self.pc_offset_9, 9),
@@ -48,13 +48,13 @@ mod tests {
 
     #[test]
     fn test_run() {
-        let mut cpu = CPU::new();
+        let mut reg = Registers::new();
         let mut bus = Bus::new();
 
         let instruction = decode(0b1110_010_000110010).unwrap();
-        cpu.run(&instruction, &mut bus).unwrap();
-        assert_eq!(cpu.reg.read_register(Register::R2), PC_START + 0x32);
-        assert_eq!(cpu.reg.read_register(Register::COND), Flag::Pos as u16);
+        instruction.run(&mut reg, &mut bus).unwrap();
+        assert_eq!(reg.read_register(Register::R2), PC_START + 0x32);
+        assert_eq!(reg.read_register(Register::COND), Flag::Pos as u16);
     }
 
     #[test]

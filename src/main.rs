@@ -1,8 +1,8 @@
 use crate::bus::Bus;
 use crate::cpu::CPU;
-use crate::display::draw;
+
 use anyhow::{Context, Result};
-use rand::Rng;
+
 use std::fs::File;
 use std::io::Read;
 use std::panic::PanicInfo;
@@ -12,7 +12,7 @@ use termion::input::MouseTerminal;
 use termion::raw::IntoRawMode;
 use termion::screen::AlternateScreen;
 use tui::backend::TermionBackend;
-use tui::widgets::{ListItem, ListState};
+
 use tui::Terminal;
 
 mod bus;
@@ -68,7 +68,7 @@ fn main() -> Result<()> {
         panic_hook(info);
     }));
 
-    for i in 0..10000 {
+    for _i in 0..10000 {
         cpu.cycle(&mut bus)?;
         bus.draw(&mut terminal, &cpu);
         thread::sleep(Duration::from_secs(1));

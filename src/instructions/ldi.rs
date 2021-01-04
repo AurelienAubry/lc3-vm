@@ -1,7 +1,7 @@
 use crate::bus::Bus;
-use crate::cpu::{register_from_u16, Flag, Register, Registers, CPU};
+use crate::cpu::{register_from_u16, Register, Registers};
 use crate::instructions::{sign_extend, two_complement_to_dec, Instruction};
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 pub struct Ldi {
     dst_reg: Register,
@@ -47,15 +47,15 @@ mod tests {
 
     #[test]
     fn test_run() {
-        let mut cpu = CPU::new();
+        let mut reg = Registers::new();
         let mut bus = Bus::new();
 
         bus.write_mem_word(PC_START + 0x32, 0x0FFF);
         bus.write_mem_word(0x0FFF, 0xABCD);
         let instruction = decode(0b1010_100_000110010).unwrap();
-        cpu.run(&instruction, &mut bus).unwrap();
-        assert_eq!(cpu.reg.read_register(Register::R4), 0xABCD);
-        assert_eq!(cpu.reg.read_register(Register::COND), Flag::Neg as u16);
+        instruction.run(&mut reg, &mut bus).unwrap();
+        assert_eq!(reg.read_register(Register::R4), 0xABCD);
+        assert_eq!(reg.read_register(Register::COND), Flag::Neg as u16);
     }
 
     #[test]

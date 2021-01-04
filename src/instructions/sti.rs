@@ -1,7 +1,7 @@
 use crate::bus::Bus;
-use crate::cpu::{register_from_u16, Flag, Register, Registers, CPU};
+use crate::cpu::{register_from_u16, Register, Registers};
 use crate::instructions::{sign_extend, two_complement_to_dec, Instruction};
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 pub struct Sti {
     src_reg: Register,
@@ -43,18 +43,18 @@ impl Instruction for Sti {
 mod tests {
     use super::*;
     use crate::bus::Bus;
-    use crate::cpu::{Flag, PC_START};
+    use crate::cpu::PC_START;
     use crate::instructions::decode;
 
     #[test]
     fn test_run() {
-        let mut cpu = CPU::new();
+        let mut reg = Registers::new();
         let mut bus = Bus::new();
 
         bus.write_mem_word(PC_START + 0x32, 0xAFFF);
-        cpu.reg.write_register(Register::R2, 0xABCD);
+        reg.write_register(Register::R2, 0xABCD);
         let instruction = decode(0b1011_010_000110010).unwrap();
-        cpu.run(&instruction, &mut bus).unwrap();
+        instruction.run(&mut reg, &mut bus).unwrap();
         assert_eq!(bus.read_mem_word(0xAFFF), 0xABCD);
     }
 

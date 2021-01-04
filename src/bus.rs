@@ -1,20 +1,11 @@
-use crate::memory::Memory;
-use anyhow::{Context, Result};
-use std::io;
-use std::io::{stdout, Write};
-
-use crate::cpu;
-use crate::cpu::{Register, CPU};
-use crate::display::draw;
-use crate::instructions::decode;
-use std::os::raw::c_int;
 use tui::backend::Backend;
 use tui::widgets::ListItem;
 use tui::Terminal;
 
-extern "C" {
-    fn getchar() -> c_int;
-}
+use crate::cpu::{Register, CPU};
+use crate::display::draw;
+use crate::instructions::decode;
+use crate::memory::Memory;
 
 pub struct Bus {
     mem: Memory,
@@ -33,20 +24,10 @@ impl Bus {
         self.mem.write_word(address, value)
     }
 
-    pub fn write_stdout(&self, data: &[u8]) -> Result<()> {
-        stdout()
-            .write_all(&data)
-            .context("Failed to write data in stdout")
-    }
-
-    pub fn read_char(&self) -> i32 {
-        unsafe { getchar() }
-    }
-
     pub fn load_rom(&mut self, buffer: &[u16]) {
         let origin = swap16(buffer[0]);
-        for i in 1..buffer.len() {
-            self.mem.write_word(origin + (i as u16), swap16(buffer[i]));
+        for (i, word) in buffer.iter().enumerate().skip(1) {
+            self.mem.write_word(origin + (i as u16), swap16(*word));
         }
     }
 

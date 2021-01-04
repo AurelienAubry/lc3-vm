@@ -1,14 +1,7 @@
-use anyhow::{Context, Result};
-use rand::Rng;
-use std::io;
-use std::io::{stdout, Stdout, Write};
-use termion::input::MouseTerminal;
-use termion::raw::{IntoRawMode, RawTerminal};
-use termion::screen::AlternateScreen;
-use tui::backend::{Backend, TermionBackend};
+use tui::backend::Backend;
 use tui::layout::{Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Modifier, Style};
-use tui::widgets::{Block, Borders, Cell, List, ListItem, ListState, Row, Table, Widget};
+use tui::widgets::{Block, Borders, List, ListItem, ListState};
 use tui::Terminal;
 
 pub fn draw<B: Backend>(terminal: &mut Terminal<B>, memory: &[ListItem], pc: usize) {

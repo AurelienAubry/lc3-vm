@@ -1,10 +1,10 @@
-use crate::bus::Bus;
-use crate::instructions::br::Br;
-use crate::instructions::{decode, Instruction};
 use anyhow::{Context, Result};
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
-use std::io::{self, Write};
+
+use crate::bus::Bus;
+
+use crate::instructions::decode;
 
 pub const REGISTER_COUNT: usize = 10;
 pub const PC_START: u16 = 0x3000;
@@ -55,9 +55,13 @@ pub struct Registers {
 
 impl Registers {
     pub fn new() -> Self {
-        Self {
+        let mut registers = Registers {
             reg: [0; REGISTER_COUNT],
-        }
+        };
+
+        registers.write_register(Register::PC, PC_START);
+
+        registers
     }
 
     pub fn increment_register(&mut self, register: Register, value: u16) {
@@ -69,7 +73,7 @@ impl Registers {
         self.reg[register as usize]
     }
 
-    pub(crate) fn write_register(&mut self, register: Register, value: u16) {
+    pub fn write_register(&mut self, register: Register, value: u16) {
         self.reg[register as usize] = value;
     }
 
@@ -88,17 +92,14 @@ impl Registers {
 }
 
 pub struct CPU {
-    pub(crate) reg: Registers,
+    reg: Registers,
 }
 
 impl CPU {
     pub fn new() -> Self {
-        let mut cpu = CPU {
+        Self {
             reg: Registers::new(),
-        };
-        cpu.reg.write_register(Register::PC, PC_START);
-
-        cpu
+        }
     }
 
     pub fn cycle(&mut self, bus: &mut Bus) -> Result<()> {
@@ -107,53 +108,7 @@ impl CPU {
         let instruction = decode(raw_instruction).with_context(|| {
             format!("Failed to decode and run instruction: {}", raw_instruction)
         })?;
-        self.run(&instruction, bus)?;
-        Ok(())
-    }
-
-    pub fn run(&mut self, instruction: &Box<dyn Instruction>, bus: &mut Bus) -> Result<()> {
-        instruction.run(&mut self.reg, bus);
-        Ok(())
-    }
-
-    fn i_trap(&mut self, instruction: u16, bus: &mut Bus) -> Result<()> {
-        let trap_code = instruction & 0xFF;
-        let trap_code: TrapCode = FromPrimitive::from_u16(trap_code)
-            .with_context(|| format!("Failed to decode TrapCode: {}", trap_code))?;
-
-        /*match trap_code {
-            TrapCode::GetC => self.trap_getc(bus)?,
-            TrapCode::Out => {}
-            TrapCode::Puts => self.trap_puts(bus)?,
-            TrapCode::In => {}
-            TrapCode::PutSp => {}
-            TrapCode::Halt => {}
-        }*/
-
-        Ok(())
-    }
-
-    fn trap_getc(&mut self, bus: &Bus) -> Result<()> {
-        self.reg
-            .write_register(Register::R0, bus.read_char() as u16);
-
-        Ok(())
-    }
-
-    fn trap_puts(&self, bus: &Bus) -> Result<()> {
-        let mut address = self.reg.read_register(Register::R0);
-        let mut char = bus.read_mem_word(address);
-        let mut string = vec![];
-
-        while char != 0 {
-            string.push(char as u8);
-            address += 1;
-            char = bus.read_mem_word(address);
-        }
-
-        bus.write_stdout(&string)
-            .context("Failed to write string in stdout")?;
-
+        instruction.run(&mut self.reg, bus)?;
         Ok(())
     }
 
@@ -162,30 +117,16 @@ impl CPU {
     }
 }
 
-fn sign_extend(mut x: u16, bit_count: u16) -> u16 {
-    if (x >> (bit_count - 1) & 0x1) == 1 {
-        x |= 0xFFFF << bit_count;
-    }
-    x
-}
-
 pub fn register_from_u16(x: u16) -> Result<Register> {
     match FromPrimitive::from_u16(x) {
         Some(reg) => Ok(reg),
         None => anyhow::bail!("Failed to cast {} to `Registers`", x),
     }
 }
-/*
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_sign_extend() {
-        let n: u16 = 0b0000_0000_0011_0011;
-        assert_eq!(sign_extend(n, 8), 0b0000_0000_0011_0011);
-        assert_eq!(sign_extend(n, 6), 0b1111_1111_1111_0011);
-    }
 
     #[test]
     fn test_register_from_u16() {
@@ -198,84 +139,32 @@ mod tests {
 
     #[test]
     fn test_update_flags() {
-        let mut cpu = CPU::new();
+        let mut reg = Registers::new();
 
-        cpu.write_register(Register::R0, 0);
-        cpu.update_flags(Register::R0);
-        assert_eq!(cpu.read_register(Register::COND), Flag::Zro as u16);
+        reg.write_register(Register::R0, 0);
+        reg.update_flags(Register::R0);
+        assert_eq!(reg.read_register(Register::COND), Flag::Zro as u16);
 
-        cpu.write_register(Register::R0, 10);
-        cpu.update_flags(Register::R0);
-        assert_eq!(cpu.read_register(Register::COND), Flag::Pos as u16);
+        reg.write_register(Register::R0, 10);
+        reg.update_flags(Register::R0);
+        assert_eq!(reg.read_register(Register::COND), Flag::Pos as u16);
 
-        cpu.write_register(Register::R0, 0b1000_0000_0000_0011);
-        cpu.update_flags(Register::R0);
-        assert_eq!(cpu.read_register(Register::COND), Flag::Neg as u16);
-    }
-
-
-    // TODO: find a way to assert TRAP tests
-
-    #[test]
-    #[ignore]
-    fn test_trap_puts() {
-        let mut cpu = CPU::new();
-        let mut bus = Bus::new();
-
-        let hello_world: [u16; 12] = [
-            0x48, 0x65, 0x6C, 0x6C, 0x6F, 0x20, 0x77, 0x6F, 0x72, 0x6C, 0x64, 0x21,
-        ];
-        let word_addr = PC_START + 0x32;
-
-        for (i, char) in hello_world.iter().enumerate() {
-            bus.write_mem_word(word_addr + (i as u16), *char);
-        }
-
-        cpu.write_register(Register::R0, word_addr);
-        cpu.trap_puts(&bus);
-    }
-
-    #[test]
-    fn test_trap_getc() {
-        let mut cpu = CPU::new();
-        let mut bus = Bus::new();
-
-        cpu.trap_getc(&bus);
-    }
-
-    #[test]
-    fn test_ret() {
-        let mut cpu = CPU::new();
-
-        // Jump to subroutine
-        cpu.i_jsr(0b0100_1_00000110010);
-        assert_eq!(cpu.read_register(Register::PC), PC_START + 0x32);
-
-        cpu.i_jmp(0b1100_000_111_000000);
-        assert_eq!(cpu.read_register(Register::PC), PC_START);
+        reg.write_register(Register::R0, 0b1000_0000_0000_0011);
+        reg.update_flags(Register::R0);
+        assert_eq!(reg.read_register(Register::COND), Flag::Neg as u16);
     }
 
     #[test]
     fn test_registers_operations() {
-        let mut cpu = CPU::new();
+        let mut reg = Registers::new();
 
-        cpu.increment_register(Register::R0, 1);
-        assert_eq!(cpu.read_register(Register::R0), 1);
+        reg.increment_register(Register::R0, 1);
+        assert_eq!(reg.read_register(Register::R0), 1);
 
-        cpu.increment_register(Register::R0, 10);
-        assert_eq!(cpu.read_register(Register::R0), 11);
+        reg.increment_register(Register::R0, 10);
+        assert_eq!(reg.read_register(Register::R0), 11);
 
-        cpu.write_register(Register::R1, 15);
-        assert_eq!(cpu.read_register(Register::R1), 15);
+        reg.write_register(Register::R1, 15);
+        assert_eq!(reg.read_register(Register::R1), 15);
     }
-
-    fn create_and_init_cpu(instructions: &Vec<u16>) -> (CPU, Bus) {
-        let mut cpu = CPU::new();
-        let mut bus = Bus::new();
-        for (i, instruction) in instructions.iter().enumerate() {
-            bus.write_mem_word(PC_START + i as u16, *instruction);
-        }
-
-        (cpu, bus)
-    }
-}*/
+}

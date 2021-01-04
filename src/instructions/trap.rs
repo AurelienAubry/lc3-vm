@@ -1,7 +1,7 @@
 use crate::bus::Bus;
-use crate::cpu::{register_from_u16, Flag, Register, Registers, CPU};
-use crate::instructions::{sign_extend, two_complement_to_dec, Instruction};
-use anyhow::{Context, Result};
+use crate::cpu::Registers;
+use crate::instructions::Instruction;
+use anyhow::Result;
 
 pub struct Trap {
     trap_vect_8: u16,
@@ -27,9 +27,7 @@ impl Instruction for Trap {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::bus::Bus;
-    use crate::cpu::{Flag, PC_START};
+
     use crate::instructions::decode;
 
     #[test]

@@ -1,4 +1,4 @@
-use crate::cpu::{Registers, CPU};
+use crate::cpu::Registers;
 use anyhow::{Context, Result};
 
 use crate::bus::Bus;
@@ -118,5 +118,17 @@ pub fn two_complement_to_dec(x: u16, bit_count: u16) -> i16 {
     if x > max {
         return (x as i16 - modulo as i16) as i16;
     }
-    return x as i16;
+    x as i16
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sign_extend() {
+        let n: u16 = 0b0000_0000_0011_0011;
+        assert_eq!(sign_extend(n, 8), 0b0000_0000_0011_0011);
+        assert_eq!(sign_extend(n, 6), 0b1111_1111_1111_0011);
+    }
 }

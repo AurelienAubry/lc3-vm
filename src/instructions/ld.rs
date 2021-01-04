@@ -1,7 +1,7 @@
 use crate::bus::Bus;
-use crate::cpu::{register_from_u16, Flag, Register, Registers, CPU};
+use crate::cpu::{register_from_u16, Register, Registers};
 use crate::instructions::{sign_extend, two_complement_to_dec, Instruction};
-use anyhow::{Context, Result};
+use anyhow::Result;
 
 pub struct Ld {
     dst_reg: Register,
@@ -47,29 +47,29 @@ mod tests {
 
     #[test]
     fn test_run() {
-        let mut cpu = CPU::new();
+        let mut reg = Registers::new();
         let mut bus = Bus::new();
 
         // NEG Flag
         bus.write_mem_word(PC_START + 0x32, 0xABCD);
         let instruction = decode(0b0010_000_000110010).unwrap();
-        cpu.run(&instruction, &mut bus).unwrap();
-        assert_eq!(cpu.reg.read_register(Register::R0), 0xABCD);
-        assert_eq!(cpu.reg.read_register(Register::COND), Flag::Neg as u16);
+        instruction.run(&mut reg, &mut bus).unwrap();
+        assert_eq!(reg.read_register(Register::R0), 0xABCD);
+        assert_eq!(reg.read_register(Register::COND), Flag::Neg as u16);
 
         // POS Flag
         bus.write_mem_word(PC_START + 0x33, 0x0BCD);
         let instruction = decode(0b0010_000_000110011).unwrap();
-        cpu.run(&instruction, &mut bus).unwrap();
-        assert_eq!(cpu.reg.read_register(Register::R0), 0x0BCD);
-        assert_eq!(cpu.reg.read_register(Register::COND), Flag::Pos as u16);
+        instruction.run(&mut reg, &mut bus).unwrap();
+        assert_eq!(reg.read_register(Register::R0), 0x0BCD);
+        assert_eq!(reg.read_register(Register::COND), Flag::Pos as u16);
 
         // ZRO Flag
         bus.write_mem_word(PC_START + 0x34, 0x0000);
         let instruction = decode(0b0010_000_000110100).unwrap();
-        cpu.run(&instruction, &mut bus).unwrap();
-        assert_eq!(cpu.reg.read_register(Register::R0), 0x0000);
-        assert_eq!(cpu.reg.read_register(Register::COND), Flag::Zro as u16);
+        instruction.run(&mut reg, &mut bus).unwrap();
+        assert_eq!(reg.read_register(Register::R0), 0x0000);
+        assert_eq!(reg.read_register(Register::COND), Flag::Zro as u16);
     }
 
     #[test]

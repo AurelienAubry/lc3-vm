@@ -1,5 +1,5 @@
 use crate::bus::Bus;
-use crate::cpu::{register_from_u16, Flag, Register, Registers, CPU};
+use crate::cpu::{register_from_u16, Register, Registers};
 use crate::instructions::{sign_extend, two_complement_to_dec, Instruction};
 use anyhow::{Context, Result};
 
@@ -27,7 +27,7 @@ impl Instruction for Jsr {
         }
     }
 
-    fn run(&self, registers: &mut Registers, bus: &mut Bus) -> Result<()> {
+    fn run(&self, registers: &mut Registers, _bus: &mut Bus) -> Result<()> {
         registers.write_register(Register::R7, registers.read_register(Register::PC));
         if self.is_jsr {
             registers.increment_register(
@@ -61,25 +61,25 @@ impl Instruction for Jsr {
 mod tests {
     use super::*;
     use crate::bus::Bus;
-    use crate::cpu::{Flag, PC_START};
+    use crate::cpu::PC_START;
     use crate::instructions::decode;
 
     #[test]
     fn test_run() {
-        let mut cpu = CPU::new();
+        let mut reg = Registers::new();
         let mut bus = Bus::new();
 
         // JSR
         let instruction = decode(0b0100_1_00000110010).unwrap();
-        cpu.run(&instruction, &mut bus).unwrap();
-        assert_eq!(cpu.reg.read_register(Register::PC), PC_START + 0x32);
+        instruction.run(&mut reg, &mut bus).unwrap();
+        assert_eq!(reg.read_register(Register::PC), PC_START + 0x32);
 
         // JSRR
-        cpu.reg.write_register(Register::PC, PC_START);
-        cpu.reg.write_register(Register::R4, 0x64);
+        reg.write_register(Register::PC, PC_START);
+        reg.write_register(Register::R4, 0x64);
         let instruction = decode(0b0100_0_00_100_000000).unwrap();
-        cpu.run(&instruction, &mut bus).unwrap();
-        assert_eq!(cpu.reg.read_register(Register::PC), 0x64);
+        instruction.run(&mut reg, &mut bus).unwrap();
+        assert_eq!(reg.read_register(Register::PC), 0x64);
     }
 
     #[test]

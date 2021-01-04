@@ -1,7 +1,7 @@
 use crate::bus::Bus;
-use crate::cpu::{register_from_u16, Flag, Register, Registers, CPU};
-use crate::instructions::{sign_extend, two_complement_to_dec, Instruction};
-use anyhow::{Context, Result};
+use crate::cpu::{register_from_u16, Register, Registers};
+use crate::instructions::Instruction;
+use anyhow::Result;
 
 pub struct Jmp {
     base_reg: Register,
@@ -33,18 +33,18 @@ impl Instruction for Jmp {
 mod tests {
     use super::*;
     use crate::bus::Bus;
-    use crate::cpu::{Flag, PC_START};
+
     use crate::instructions::decode;
 
     #[test]
     fn test_run() {
-        let mut cpu = CPU::new();
+        let mut reg = Registers::new();
         let mut bus = Bus::new();
 
-        cpu.reg.write_register(Register::R2, 0xABCD);
+        reg.write_register(Register::R2, 0xABCD);
         let instruction = decode(0b1100_000_010_000000).unwrap();
-        cpu.run(&instruction, &mut bus).unwrap();
-        assert_eq!(cpu.reg.read_register(Register::PC), 0xABCD);
+        instruction.run(&mut reg, &mut bus).unwrap();
+        assert_eq!(reg.read_register(Register::PC), 0xABCD);
     }
 
     #[test]

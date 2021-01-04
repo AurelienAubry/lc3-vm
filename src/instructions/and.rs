@@ -1,5 +1,5 @@
 use crate::bus::Bus;
-use crate::cpu::{register_from_u16, Flag, Register, Registers, CPU};
+use crate::cpu::{register_from_u16, Register, Registers};
 use crate::instructions::{sign_extend, two_complement_to_dec, Instruction};
 use anyhow::{Context, Result};
 
@@ -36,7 +36,7 @@ impl Instruction for And {
         }
     }
 
-    fn run(&self, registers: &mut Registers, bus: &mut Bus) -> Result<()> {
+    fn run(&self, registers: &mut Registers, _bus: &mut Bus) -> Result<()> {
         if self.is_imm {
             let val: u32 = sign_extend(self.imm5.context("Failed to read imm5")?, 5) as u32
                 & registers.read_register(self.sr1_reg) as u32;
@@ -76,34 +76,34 @@ impl Instruction for And {
 mod tests {
     use super::*;
     use crate::bus::Bus;
-    use crate::cpu::{Flag, PC_START};
+    use crate::cpu::Flag;
     use crate::instructions::decode;
 
     #[test]
     fn test_run() {
-        let mut cpu = CPU::new();
+        let mut reg = Registers::new();
         let mut bus = Bus::new();
 
         // Registers Mode: 10+5=5
-        cpu.reg.write_register(Register::R0, 0x0A);
-        cpu.reg.write_register(Register::R1, 0x05);
+        reg.write_register(Register::R0, 0x0A);
+        reg.write_register(Register::R1, 0x05);
         let instruction = decode(0b0001_010_000_0_00_001).unwrap();
-        cpu.run(&instruction, &mut bus).unwrap();
-        assert_eq!(cpu.reg.read_register(Register::R2), 0x0A + 0x05);
-        assert_eq!(cpu.reg.read_register(Register::COND), Flag::Pos as u16);
+        instruction.run(&mut reg, &mut bus).unwrap();
+        assert_eq!(reg.read_register(Register::R2), 0x0A + 0x05);
+        assert_eq!(reg.read_register(Register::COND), Flag::Pos as u16);
 
-        cpu.reg.write_register(Register::R0, 0xFF);
-        cpu.reg.write_register(Register::R1, 0x0F);
+        reg.write_register(Register::R0, 0xFF);
+        reg.write_register(Register::R1, 0x0F);
         let instruction = decode(0b0101_010_000_0_00_001).unwrap();
-        cpu.run(&instruction, &mut bus).unwrap();
-        assert_eq!(cpu.reg.read_register(Register::R2), 0x0F & 0xFF);
-        assert_eq!(cpu.reg.read_register(Register::COND), Flag::Pos as u16);
+        instruction.run(&mut reg, &mut bus).unwrap();
+        assert_eq!(reg.read_register(Register::R2), 0x0F & 0xFF);
+        assert_eq!(reg.read_register(Register::COND), Flag::Pos as u16);
 
         // Immediate Mode: 10-5=5
         let instruction = decode(0b0101_011_000_1_01111).unwrap();
-        cpu.run(&instruction, &mut bus).unwrap();
-        assert_eq!(cpu.reg.read_register(Register::R3), 0xFF & 0x0F);
-        assert_eq!(cpu.reg.read_register(Register::COND), Flag::Pos as u16);
+        instruction.run(&mut reg, &mut bus).unwrap();
+        assert_eq!(reg.read_register(Register::R3), 0xFF & 0x0F);
+        assert_eq!(reg.read_register(Register::COND), Flag::Pos as u16);
     }
 
     #[test]
