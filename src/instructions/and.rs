@@ -11,41 +11,42 @@ pub struct And {
     is_imm: bool,
 }
 
-impl Instruction for And {
-    fn new(instruction: u16) -> Result<Box<dyn Instruction>> {
+impl And {
+    pub fn new(instruction: u16) -> Result<Self> {
         let dst_reg: Register = register_from_u16((instruction >> 9) & 0x7)?;
         let sr1_reg = register_from_u16((instruction >> 6) & 0x7)?;
         let is_imm = ((instruction >> 5) & 0x1) == 1;
 
         if is_imm {
-            Ok(Box::new(Self {
+            Ok(Self {
                 dst_reg,
                 sr1_reg,
                 sr2_reg: None,
                 imm5: Some(instruction & 0x1F),
                 is_imm,
-            }))
+            })
         } else {
-            Ok(Box::new(Self {
+            Ok(Self {
                 dst_reg,
                 sr1_reg,
                 sr2_reg: Some(register_from_u16(instruction & 0x7)?),
                 imm5: None,
                 is_imm,
-            }))
+            })
         }
     }
+}
 
+impl Instruction for And {
     fn run(&self, registers: &mut Registers, _bus: &mut Bus) -> Result<()> {
         if self.is_imm {
-            let val: u32 = sign_extend(self.imm5.context("Failed to read imm5")?, 5) as u32
-                & registers.read_register(self.sr1_reg) as u32;
-            registers.write_register(self.dst_reg, val as u16);
+            let val = sign_extend(self.imm5.context("Failed to read imm5")?, 5)
+                & registers.read_register(self.sr1_reg);
+            registers.write_register(self.dst_reg, val);
         } else {
-            let val: u32 = registers.read_register(self.sr1_reg) as u32
-                & registers.read_register(self.sr2_reg.context("Failed to read sr2 register")?)
-                    as u32;
-            registers.write_register(self.dst_reg, val as u16);
+            let val = registers.read_register(self.sr1_reg)
+                & registers.read_register(self.sr2_reg.context("Failed to read sr2 register")?);
+            registers.write_register(self.dst_reg, val);
         }
 
         registers.update_flags(self.dst_reg);
@@ -82,7 +83,7 @@ mod tests {
     #[test]
     fn test_run() {
         let mut reg = Registers::new();
-        let mut bus = Bus::new();
+        let mut bus = Bus::new().unwrap();
 
         // Registers Mode: 10+5=5
         reg.write_register(Register::R0, 0x0A);

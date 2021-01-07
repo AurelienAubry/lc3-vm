@@ -8,14 +8,16 @@ pub struct Not {
     src_reg: Register,
 }
 
-impl Instruction for Not {
-    fn new(instruction: u16) -> Result<Box<dyn Instruction>> {
+impl Not {
+    pub fn new(instruction: u16) -> Result<Self> {
         let dst_reg = register_from_u16(instruction >> 9 & 0x7)?;
         let src_reg = register_from_u16(instruction >> 6 & 0x7)?;
 
-        Ok(Box::new(Self { dst_reg, src_reg }))
+        Ok(Self { dst_reg, src_reg })
     }
+}
 
+impl Instruction for Not {
     fn run(&self, registers: &mut Registers, _bus: &mut Bus) -> Result<()> {
         registers.write_register(self.dst_reg, !registers.read_register(self.src_reg));
 
@@ -39,7 +41,7 @@ mod tests {
     #[test]
     fn test_run() {
         let mut reg = Registers::new();
-        let mut bus = Bus::new();
+        let mut bus = Bus::new().unwrap();
 
         // ZRO FLAG
         reg.write_register(Register::R0, 0b1111_1111_1111_1111);

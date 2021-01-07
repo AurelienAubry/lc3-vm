@@ -9,24 +9,26 @@ pub struct Jsr {
     base_reg: Option<Register>,
 }
 
-impl Instruction for Jsr {
-    fn new(instruction: u16) -> Result<Box<dyn Instruction>> {
-        let is_jsr = ((instruction >> 11) & 0x1) == 1;
+impl Jsr {
+    pub fn new(instruction: u16) -> Result<Self> {
+        let is_jsr = ((instruction >> 11) & 0x1) != 0;
         if is_jsr {
-            Ok(Box::new(Self {
+            Ok(Self {
                 is_jsr,
                 pc_offset_11: Some(instruction & 0x7FF),
                 base_reg: None,
-            }))
+            })
         } else {
-            Ok(Box::new(Self {
+            Ok(Self {
                 is_jsr,
                 pc_offset_11: None,
                 base_reg: Some(register_from_u16((instruction >> 6) & 0x7)?),
-            }))
+            })
         }
     }
+}
 
+impl Instruction for Jsr {
     fn run(&self, registers: &mut Registers, _bus: &mut Bus) -> Result<()> {
         registers.write_register(Register::R7, registers.read_register(Register::PC));
         if self.is_jsr {
@@ -67,7 +69,7 @@ mod tests {
     #[test]
     fn test_run() {
         let mut reg = Registers::new();
-        let mut bus = Bus::new();
+        let mut bus = Bus::new().unwrap();
 
         // JSR
         let instruction = decode(0b0100_1_00000110010).unwrap();

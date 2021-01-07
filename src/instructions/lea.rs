@@ -8,22 +8,23 @@ pub struct Lea {
     pc_offset_9: u16,
 }
 
-impl Instruction for Lea {
-    fn new(instruction: u16) -> Result<Box<dyn Instruction>> {
+impl Lea {
+    pub fn new(instruction: u16) -> Result<Self> {
         let dst_reg = register_from_u16(instruction >> 9 & 0x7)?;
         let pc_offset_9 = instruction & 0x1FF;
 
-        Ok(Box::new(Self {
+        Ok(Self {
             dst_reg,
             pc_offset_9,
-        }))
+        })
     }
+}
 
+impl Instruction for Lea {
     fn run(&self, registers: &mut Registers, _bus: &mut Bus) -> Result<()> {
-        registers.write_register(
-            self.dst_reg,
-            registers.read_register(Register::PC) + sign_extend(self.pc_offset_9, 9),
-        );
+        let val =
+            registers.read_register(Register::PC) as u32 + sign_extend(self.pc_offset_9, 9) as u32;
+        registers.write_register(self.dst_reg, val as u16);
 
         registers.update_flags(self.dst_reg);
 
@@ -49,7 +50,7 @@ mod tests {
     #[test]
     fn test_run() {
         let mut reg = Registers::new();
-        let mut bus = Bus::new();
+        let mut bus = Bus::new().unwrap();
 
         let instruction = decode(0b1110_010_000110010).unwrap();
         instruction.run(&mut reg, &mut bus).unwrap();
