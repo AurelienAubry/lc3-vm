@@ -8,21 +8,24 @@ pub struct Ldi {
     pc_offset_9: u16,
 }
 
-impl Instruction for Ldi {
-    fn new(instruction: u16) -> Result<Box<dyn Instruction>> {
+impl Ldi {
+    pub fn new(instruction: u16) -> Result<Self> {
         let dst_reg = register_from_u16(instruction >> 9 & 0x7)?;
         let pc_offset_9 = instruction & 0x1FF;
 
-        Ok(Box::new(Self {
+        Ok(Self {
             dst_reg,
             pc_offset_9,
-        }))
+        })
     }
+}
 
+impl Instruction for Ldi {
     fn run(&self, registers: &mut Registers, bus: &mut Bus) -> Result<()> {
-        let mem_addr = registers.read_register(Register::PC) + sign_extend(self.pc_offset_9, 9);
-        let real_addr = bus.read_mem_word(bus.read_mem_word(mem_addr));
-        registers.write_register(self.dst_reg, real_addr);
+        let tmp_address = bus.read_mem_word(
+            registers.read_register(Register::PC) + sign_extend(self.pc_offset_9, 9),
+        );
+        registers.write_register(self.dst_reg, bus.read_mem_word(tmp_address));
 
         registers.update_flags(self.dst_reg);
 
@@ -48,7 +51,7 @@ mod tests {
     #[test]
     fn test_run() {
         let mut reg = Registers::new();
-        let mut bus = Bus::new();
+        let mut bus = Bus::new().unwrap();
 
         bus.write_mem_word(PC_START + 0x32, 0x0FFF);
         bus.write_mem_word(0x0FFF, 0xABCD);

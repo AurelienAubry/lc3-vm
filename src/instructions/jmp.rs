@@ -7,13 +7,15 @@ pub struct Jmp {
     base_reg: Register,
 }
 
-impl Instruction for Jmp {
-    fn new(instruction: u16) -> Result<Box<dyn Instruction>> {
+impl Jmp {
+    pub fn new(instruction: u16) -> Result<Self> {
         let base_reg = register_from_u16(instruction >> 6 & 0x7)?;
 
-        Ok(Box::new(Self { base_reg }))
+        Ok(Self { base_reg })
     }
+}
 
+impl Instruction for Jmp {
     fn run(&self, registers: &mut Registers, _bus: &mut Bus) -> Result<()> {
         registers.write_register(Register::PC, registers.read_register(self.base_reg));
 
@@ -39,7 +41,7 @@ mod tests {
     #[test]
     fn test_run() {
         let mut reg = Registers::new();
-        let mut bus = Bus::new();
+        let mut bus = Bus::new().unwrap();
 
         reg.write_register(Register::R2, 0xABCD);
         let instruction = decode(0b1100_000_010_000000).unwrap();

@@ -9,19 +9,21 @@ pub struct Ldr {
     offset_6: u16,
 }
 
-impl Instruction for Ldr {
-    fn new(instruction: u16) -> Result<Box<dyn Instruction>> {
+impl Ldr {
+    pub fn new(instruction: u16) -> Result<Self> {
         let dst_reg = register_from_u16(instruction >> 9 & 0x7)?;
         let base_reg = register_from_u16(instruction >> 6 & 0x7)?;
         let offset_6 = instruction & 0x3F;
 
-        Ok(Box::new(Self {
+        Ok(Self {
             dst_reg,
             base_reg,
             offset_6,
-        }))
+        })
     }
+}
 
+impl Instruction for Ldr {
     fn run(&self, registers: &mut Registers, bus: &mut Bus) -> Result<()> {
         let address =
             registers.read_register(self.base_reg) as u32 + sign_extend(self.offset_6, 6) as u32;
@@ -52,7 +54,7 @@ mod tests {
     #[test]
     fn test_run() {
         let mut reg = Registers::new();
-        let mut bus = Bus::new();
+        let mut bus = Bus::new().unwrap();
 
         bus.write_mem_word(PC_START + 0x32, 0x0FFF);
         reg.write_register(Register::R2, PC_START + 0x32 + 0x05);

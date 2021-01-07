@@ -71,9 +71,6 @@ pub enum OpCode {
 }
 
 pub trait Instruction {
-    fn new(instruction: u16) -> Result<Box<dyn Instruction>>
-    where
-        Self: Sized;
     fn run(&self, registers: &mut Registers, bus: &mut Bus) -> Result<()>;
     fn to_str(&self) -> String;
 }
@@ -90,26 +87,26 @@ pub fn decode(raw_instruction: u16) -> Result<Box<dyn Instruction>> {
     let opcode: OpCode = FromPrimitive::from_u16(opcode)
         .with_context(|| format!("Failed to decode opcode: {}", opcode))?;
 
-    let instruction: Result<Box<dyn Instruction>> = match opcode {
-        OpCode::Br => Br::new(raw_instruction),
-        OpCode::Add => Add::new(raw_instruction),
-        OpCode::Ld => Ld::new(raw_instruction),
-        OpCode::St => St::new(raw_instruction),
-        OpCode::Jsr => Jsr::new(raw_instruction),
-        OpCode::And => And::new(raw_instruction),
-        OpCode::Ldr => Ldr::new(raw_instruction),
-        OpCode::Str => Str::new(raw_instruction),
+    let instruction: Box<dyn Instruction> = match opcode {
+        OpCode::Br => Box::new(Br::new(raw_instruction)?),
+        OpCode::Add => Box::new(Add::new(raw_instruction)?),
+        OpCode::Ld => Box::new(Ld::new(raw_instruction)?),
+        OpCode::St => Box::new(St::new(raw_instruction)?),
+        OpCode::Jsr => Box::new(Jsr::new(raw_instruction)?),
+        OpCode::And => Box::new(And::new(raw_instruction)?),
+        OpCode::Ldr => Box::new(Ldr::new(raw_instruction)?),
+        OpCode::Str => Box::new(Str::new(raw_instruction)?),
         OpCode::Rti => anyhow::bail!("Bad opcode: OpRti"),
-        OpCode::Not => Not::new(raw_instruction),
-        OpCode::Ldi => Ldi::new(raw_instruction),
-        OpCode::Sti => Sti::new(raw_instruction),
-        OpCode::Jmp => Jmp::new(raw_instruction),
+        OpCode::Not => Box::new(Not::new(raw_instruction)?),
+        OpCode::Ldi => Box::new(Ldi::new(raw_instruction)?),
+        OpCode::Sti => Box::new(Sti::new(raw_instruction)?),
+        OpCode::Jmp => Box::new(Jmp::new(raw_instruction)?),
         OpCode::Res => anyhow::bail!("Bad opcode: OpRes"),
-        OpCode::Lea => Lea::new(raw_instruction),
-        OpCode::Trap => Trap::new(raw_instruction),
+        OpCode::Lea => Box::new(Lea::new(raw_instruction)?),
+        OpCode::Trap => Box::new(Trap::new(raw_instruction)?),
     };
 
-    instruction
+    Ok(instruction)
 }
 
 pub fn two_complement_to_dec(x: u16, bit_count: u16) -> i16 {

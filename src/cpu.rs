@@ -33,22 +33,6 @@ pub enum Flag {
     Neg = 1 << 2,
 }
 
-#[derive(FromPrimitive, Debug, PartialEq)]
-pub enum TrapCode {
-    /// Get character from keyboard, not echoed onto the terminal
-    GetC = 0x20,
-    /// Output a character
-    Out = 0x21,
-    /// Output a word string
-    Puts = 0x22,
-    /// Get character from keyboard, echoed onto the terminal
-    In = 0x23,
-    /// Output a byte string
-    PutSp = 0x24,
-    /// Halt the program
-    Halt = 0x25,
-}
-
 pub struct Registers {
     reg: [u16; REGISTER_COUNT],
 }
@@ -82,7 +66,7 @@ impl Registers {
         let flag;
         if updated_reg_value == 0 {
             flag = Flag::Zro;
-        } else if (updated_reg_value >> 15) == 1 {
+        } else if (updated_reg_value >> 15) != 0 {
             flag = Flag::Neg;
         } else {
             flag = Flag::Pos;
@@ -104,16 +88,14 @@ impl CPU {
 
     pub fn cycle(&mut self, bus: &mut Bus) -> Result<()> {
         let raw_instruction = bus.read_mem_word(self.reg.read_register(Register::PC));
-        self.reg.increment_register(Register::PC, 1);
         let instruction = decode(raw_instruction).with_context(|| {
             format!("Failed to decode and run instruction: {}", raw_instruction)
         })?;
+
+        self.reg.increment_register(Register::PC, 1);
+
         instruction.run(&mut self.reg, bus)?;
         Ok(())
-    }
-
-    pub fn get_registers(&self) -> &Registers {
-        &self.reg
     }
 }
 

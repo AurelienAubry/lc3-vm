@@ -8,17 +8,19 @@ pub struct Br {
     cond_flag: u16,
 }
 
-impl Instruction for Br {
-    fn new(instruction: u16) -> Result<Box<dyn Instruction>> {
+impl Br {
+    pub fn new(instruction: u16) -> Result<Self> {
         let pc_offset = sign_extend(instruction & 0x1FF, 9);
         let cond_flag = (instruction >> 9) & 0x7;
 
-        Ok(Box::new(Self {
+        Ok(Self {
             pc_offset,
             cond_flag,
-        }))
+        })
     }
+}
 
+impl Instruction for Br {
     fn run(&self, registers: &mut Registers, _bus: &mut Bus) -> Result<()> {
         let cond_reg = registers.read_register(Register::COND);
         if self.cond_flag & cond_reg != 0 {
@@ -55,7 +57,7 @@ mod tests {
     #[test]
     fn test_run() {
         let mut reg = Registers::new();
-        let mut bus = Bus::new();
+        let mut bus = Bus::new().unwrap();
         // PC += 3, POS Flag
         reg.write_register(Register::COND, Flag::Pos as u16);
         let instruction = decode(0b0000_0010_0000_0011).unwrap();

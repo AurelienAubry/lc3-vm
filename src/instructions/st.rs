@@ -8,22 +8,23 @@ pub struct St {
     pc_offset_9: u16,
 }
 
-impl Instruction for St {
-    fn new(instruction: u16) -> Result<Box<dyn Instruction>> {
+impl St {
+    pub fn new(instruction: u16) -> Result<Self> {
         let src_reg = register_from_u16(instruction >> 9 & 0x7)?;
         let pc_offset_9 = instruction & 0x1FF;
 
-        Ok(Box::new(Self {
+        Ok(Self {
             src_reg,
             pc_offset_9,
-        }))
+        })
     }
+}
 
+impl Instruction for St {
     fn run(&self, registers: &mut Registers, bus: &mut Bus) -> Result<()> {
-        bus.write_mem_word(
-            registers.read_register(Register::PC) + sign_extend(self.pc_offset_9, 9),
-            registers.read_register(self.src_reg),
-        );
+        let address =
+            registers.read_register(Register::PC) as u32 + sign_extend(self.pc_offset_9, 9) as u32;
+        bus.write_mem_word(address as u16, registers.read_register(self.src_reg));
 
         Ok(())
     }
@@ -47,7 +48,7 @@ mod tests {
     #[test]
     fn test_run() {
         let mut reg = Registers::new();
-        let mut bus = Bus::new();
+        let mut bus = Bus::new().unwrap();
 
         reg.write_register(Register::R4, 0xABCD);
         let instruction = decode(0b0011_100_000110010).unwrap();

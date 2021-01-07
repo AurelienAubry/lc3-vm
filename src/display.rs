@@ -1,52 +1,28 @@
-use tui::backend::Backend;
-use tui::layout::{Constraint, Direction, Layout, Rect};
-use tui::style::{Color, Modifier, Style};
-use tui::widgets::{Block, Borders, List, ListItem, ListState};
-use tui::Terminal;
+use anyhow::Result;
+use std::io;
+use std::io::{Stdout, Write};
+use termion::raw::{IntoRawMode, RawTerminal};
 
-pub fn draw<B: Backend>(terminal: &mut Terminal<B>, memory: &[ListItem], pc: usize) {
-    terminal
-        .draw(|f| {
-            let chunks_top = Layout::default()
-                .direction(Direction::Horizontal)
-                .constraints([Constraint::Ratio(3, 4), Constraint::Ratio(1, 4)].as_ref())
-                .split(Rect {
-                    x: 0,
-                    y: 0,
-                    width: f.size().width,
-                    height: 2 * f.size().height / 3,
-                });
-            let chunks_bot = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([Constraint::Min(0)].as_ref())
-                .split(Rect {
-                    x: 0,
-                    y: 2 * f.size().height / 3,
-                    width: f.size().width,
-                    height: f.size().height / 3,
-                });
+pub struct Display {
+    stdout: RawTerminal<Stdout>,
+}
 
-            let left_pane = Block::default().title("Left").borders(Borders::ALL);
-            let bottom_pane = Block::default().title("Bottom").borders(Borders::ALL);
+impl Display {
+    pub fn new() -> Result<Self> {
+        let display = Self {
+            stdout: io::stdout().into_raw_mode()?,
+        };
 
-            let list = List::new(memory)
-                .block(Block::default().title("Right").borders(Borders::ALL))
-                .style(Style::default().fg(Color::White))
-                .highlight_style(
-                    Style::default()
-                        .add_modifier(Modifier::BOLD)
-                        .bg(Color::Cyan),
-                );
-            //.highlight_symbol(">>");
+        Ok(display)
+    }
 
-            let mut state = ListState::default();
-            state.select(Some(pc));
+    pub fn output_char(&mut self, c: u8) -> Result<()> {
+        self.stdout.write_all(&[c])?;
+        Ok(())
+    }
 
-            f.render_widget(left_pane, chunks_top[0]);
-            f.render_stateful_widget(list, chunks_top[1], &mut state);
-            f.render_widget(bottom_pane, chunks_bot[0]);
-
-            // println!("Draw!");
-        })
-        .unwrap();
+    pub fn output_string(&mut self, string: &[u8]) -> Result<()> {
+        self.stdout.write_all(string)?;
+        Ok(())
+    }
 }
